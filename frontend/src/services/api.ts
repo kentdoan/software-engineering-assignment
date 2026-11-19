@@ -27,8 +27,8 @@ import {
 const TOKEN_KEY = 'semh_auth_token';
 
 const api = axios.create({
-  baseURL: '/api',
-  timeout: 10000,
+  baseURL: import.meta.env.VITE_API_URL ?? '/api',
+  timeout: 60000,
 });
 
 api.interceptors.request.use((config) => {
