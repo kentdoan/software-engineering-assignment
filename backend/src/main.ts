@@ -14,8 +14,14 @@ async function bootstrap() {
       transform: true,
     }),
   );
+  // FRONTEND_ORIGIN: danh sách origin được phép, phân tách bằng dấu phẩy.
+  // Nếu không đặt thì cho phép mọi origin (phục vụ chạy local).
+  const allowedOrigins = (process.env.FRONTEND_ORIGIN || '')
+    .split(',')
+    .map((o) => o.trim().replace(/\/$/, ''))
+    .filter(Boolean);
   app.enableCors({
-    origin: true,
+    origin: allowedOrigins.length > 0 ? allowedOrigins : true,
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
     credentials: true,
   });
