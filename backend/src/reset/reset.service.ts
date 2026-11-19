@@ -36,7 +36,7 @@ export class ResetService {
       for (const stmt of statements) {
         await tx.$executeRawUnsafe(stmt);
       }
-    });
+    }, { timeout: 60_000, maxWait: 10_000 });
 
     this.logger.log(`Reset PostgreSQL completed (${statements.length} rows inserted from ${seedPath})`);
     return {
