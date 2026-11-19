@@ -1,0 +1,53 @@
+# Assignment documents, diagrams, and non-web files
+/img/
+/mermaid/
+/method-desc/
+/docs/
+/tests/
+GEMINI.md
+*.md
+!README.md
+*.pdf
+*.doc
+*.docx
+*.ppt
+*.pptx
+*.xls
+*.xlsx
+*.drawio
+*.mmd
+*.vsdx
+*.excalidraw
+
+# Dependencies
+node_modules/
+
+# Build outputs and caches
+dist/
+build/
+.vite/
+*.tsbuildinfo
+coverage/
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Editor, OS, and AI tooling
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+.gemini/
+.claude/
+.cursor/

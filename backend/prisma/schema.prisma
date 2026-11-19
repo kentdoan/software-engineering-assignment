@@ -1,0 +1,377 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model audit_logs {
+  id          String         @id @db.VarChar(64)
+  timestamp   DateTime       @default(now()) @db.Timestamptz(6)
+  category    audit_category
+  actor_name  String         @db.VarChar(150)
+  actor_id    String         @db.VarChar(64)
+  description String
+  ip_address  String         @default("127.0.0.1") @db.VarChar(64)
+  status      audit_status   @default(SUCCESS)
+
+  @@index([timestamp(sort: Desc)], map: "idx_audit_logs_timestamp")
+}
+
+model auth_sessions {
+  jti        String    @id @db.VarChar(64)
+  user_id    String    @db.VarChar(64)
+  role       user_role
+  created_at DateTime  @default(now()) @db.Timestamptz(6)
+  expires_at DateTime  @db.Timestamptz(6)
+  users      users     @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([user_id], map: "idx_auth_sessions_user_id")
+}
+
+model bookings {
+  id         String         @id @db.VarChar(64)
+  code       String?        @unique @db.VarChar(32)
+  user_id    String         @db.VarChar(64)
+  vehicle_id String         @db.VarChar(64)
+  hub_id     String         @db.VarChar(64)
+  created_at DateTime       @default(now()) @db.Timestamptz(6)
+  expires_at DateTime       @db.Timestamptz(6)
+  status     booking_status @default(ACTIVE)
+  hubs       hubs           @relation(fields: [hub_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users      users          @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  vehicles   vehicles       @relation(fields: [vehicle_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  rentals    rentals[]
+
+  @@index([user_id, status], map: "idx_bookings_user_status")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model charging_points {
+  id                String                @id @db.VarChar(64)
+  hub_id            String                @db.VarChar(64)
+  code              String                @unique @db.VarChar(32)
+  bay_code          String                @db.VarChar(32)
+  connector_type    String                @db.VarChar(32)
+  power_kw          Float
+  status            charging_point_status @default(AVAILABLE)
+  hubs              hubs                  @relation(fields: [hub_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  charging_sessions charging_sessions[]
+  incidents         incidents[]
+
+  @@index([hub_id, status], map: "idx_charging_points_hub_status")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model charging_sessions {
+  id                  String                  @id @db.VarChar(64)
+  code                String                  @unique @db.VarChar(32)
+  user_id             String?                 @db.VarChar(64)
+  vehicle_id          String?                 @db.VarChar(64)
+  private_vehicle_id  String?                 @db.VarChar(64)
+  vehicle_label       String                  @db.VarChar(180)
+  hub_id              String                  @db.VarChar(64)
+  charging_point_id   String                  @db.VarChar(64)
+  charging_point_code String                  @db.VarChar(32)
+  bay_code            String                  @db.VarChar(32)
+  is_private_vehicle  Boolean                 @default(false)
+  session_date        String                  @db.VarChar(16)
+  start_time          String                  @db.VarChar(16)
+  end_time            String                  @db.VarChar(16)
+  current_soc         Int
+  target_soc          Int
+  priority_score      Int                     @default(0)
+  status              charging_session_status @default(SCHEDULED)
+  created_at          DateTime                @default(now()) @db.Timestamptz(6)
+  charging_points     charging_points         @relation(fields: [charging_point_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  hubs                hubs                    @relation(fields: [hub_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  private_vehicles    private_vehicles?       @relation(fields: [private_vehicle_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users               users?                  @relation(fields: [user_id], references: [id], onUpdate: NoAction)
+  vehicles            vehicles?               @relation(fields: [vehicle_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([hub_id, status], map: "idx_charging_sessions_hub_status")
+}
+
+model dispatch_order_items {
+  id                String          @id @db.VarChar(64)
+  dispatch_order_id String          @db.VarChar(64)
+  vehicle_id        String          @db.VarChar(64)
+  plate_number      String          @db.VarChar(32)
+  dispatch_orders   dispatch_orders @relation(fields: [dispatch_order_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  vehicles          vehicles        @relation(fields: [vehicle_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([dispatch_order_id, vehicle_id])
+}
+
+model dispatch_orders {
+  id                                       String                 @id @db.VarChar(64)
+  code                                     String                 @unique @db.VarChar(32)
+  operator_id                              String                 @db.VarChar(64)
+  source_hub_id                            String                 @db.VarChar(64)
+  target_hub_id                            String                 @db.VarChar(64)
+  note                                     String?
+  status                                   dispatch_status        @default(IN_TRANSIT)
+  created_at                               DateTime               @default(now()) @db.Timestamptz(6)
+  completed_at                             DateTime?              @db.Timestamptz(6)
+  dispatch_order_items                     dispatch_order_items[]
+  users                                    users                  @relation(fields: [operator_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  hubs_dispatch_orders_source_hub_idTohubs hubs                   @relation("dispatch_orders_source_hub_idTohubs", fields: [source_hub_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  hubs_dispatch_orders_target_hub_idTohubs hubs                   @relation("dispatch_orders_target_hub_idTohubs", fields: [target_hub_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model hubs {
+  id                                                  String              @id @db.VarChar(64)
+  name                                                String              @db.VarChar(200)
+  latitude                                            Float
+  longitude                                           Float
+  total_docks                                         Int
+  total_charging_ports                                Int
+  description                                         String?
+  bookings                                            bookings[]
+  charging_points                                     charging_points[]
+  charging_sessions                                   charging_sessions[]
+  dispatch_orders_dispatch_orders_source_hub_idTohubs dispatch_orders[]   @relation("dispatch_orders_source_hub_idTohubs")
+  dispatch_orders_dispatch_orders_target_hub_idTohubs dispatch_orders[]   @relation("dispatch_orders_target_hub_idTohubs")
+  incidents                                           incidents[]
+  parking_bookings                                    parking_bookings[]
+  rentals_rentals_destination_hub_idTohubs            rentals[]           @relation("rentals_destination_hub_idTohubs")
+  rentals_rentals_origin_hub_idTohubs                 rentals[]           @relation("rentals_origin_hub_idTohubs")
+  scenarios                                           scenarios[]
+  vehicles                                            vehicles[]
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model incidents {
+  id                String                 @id @db.VarChar(64)
+  code              String                 @unique @db.VarChar(32)
+  reporter_id       String                 @db.VarChar(64)
+  hub_id            String                 @db.VarChar(64)
+  resource_type     incident_resource_type
+  vehicle_id        String?                @db.VarChar(64)
+  charging_point_id String?                @db.VarChar(64)
+  resource_label    String                 @db.VarChar(200)
+  incident_type     String                 @db.VarChar(150)
+  description       String
+  affected_summary  String?
+  status            incident_status        @default(OPEN)
+  created_at        DateTime               @default(now()) @db.Timestamptz(6)
+  resolved_at       DateTime?              @db.Timestamptz(6)
+  charging_points   charging_points?       @relation(fields: [charging_point_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  hubs              hubs                   @relation(fields: [hub_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  users             users                  @relation(fields: [reporter_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  vehicles          vehicles?              @relation(fields: [vehicle_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model operator_profiles {
+  id         String  @id @db.VarChar(64)
+  user_id    String  @unique @db.VarChar(64)
+  staff_id   String  @db.VarChar(64)
+  department String? @db.VarChar(200)
+  users      users   @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model parking_bookings {
+  id            String         @id @db.VarChar(64)
+  code          String         @unique @db.VarChar(32)
+  user_id       String         @db.VarChar(64)
+  hub_id        String         @db.VarChar(64)
+  hub_name      String         @db.VarChar(200)
+  vehicle_plate String         @db.VarChar(32)
+  bay_code      String         @db.VarChar(32)
+  arrival_time  String         @db.VarChar(16)
+  expires_at    DateTime       @db.Timestamptz(6)
+  status        booking_status @default(ACTIVE)
+  created_at    DateTime       @default(now()) @db.Timestamptz(6)
+  hubs          hubs           @relation(fields: [hub_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users         users          @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([hub_id, status], map: "idx_parking_bookings_hub_status")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model private_vehicles {
+  id                   String              @id @db.VarChar(64)
+  user_id              String              @db.VarChar(64)
+  plate_number         String              @db.VarChar(32)
+  model                String              @db.VarChar(120)
+  vehicle_type         String              @db.VarChar(100)
+  charger_type         String              @db.VarChar(32)
+  battery_capacity_kwh Float
+  charging_sessions    charging_sessions[]
+  users                users               @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([user_id, plate_number])
+}
+
+model rentals {
+  id                                    String        @id @db.VarChar(64)
+  user_id                               String        @db.VarChar(64)
+  vehicle_id                            String        @db.VarChar(64)
+  booking_id                            String?       @db.VarChar(64)
+  origin_hub_id                         String        @db.VarChar(64)
+  destination_hub_id                    String?       @db.VarChar(64)
+  return_bay_code                       String?       @db.VarChar(32)
+  start_time                            DateTime      @default(now()) @db.Timestamptz(6)
+  end_time                              DateTime?     @db.Timestamptz(6)
+  duration_minutes                      Int?
+  distance_km                           Float?
+  fare                                  Int?
+  damaged_reported                      Boolean       @default(false)
+  damage_note                           String?
+  status                                rental_status @default(ACTIVE)
+  bookings                              bookings?     @relation(fields: [booking_id], references: [id], onUpdate: NoAction)
+  hubs_rentals_destination_hub_idTohubs hubs?         @relation("rentals_destination_hub_idTohubs", fields: [destination_hub_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  hubs_rentals_origin_hub_idTohubs      hubs          @relation("rentals_origin_hub_idTohubs", fields: [origin_hub_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  users                                 users         @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  vehicles                              vehicles      @relation(fields: [vehicle_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([user_id, status], map: "idx_rentals_user_status")
+}
+
+model scenarios {
+  id                String @id @db.VarChar(64)
+  name              String @db.VarChar(200)
+  description       String
+  target_hub_id     String @db.VarChar(64)
+  action_type       String @db.VarChar(64)
+  intensity         Int
+  warning_threshold Int
+  hubs              hubs   @relation(fields: [target_hub_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model student_profiles {
+  id         String  @id @db.VarChar(64)
+  user_id    String  @unique @db.VarChar(64)
+  student_id String? @db.VarChar(64)
+  university String? @db.VarChar(200)
+  balance    Int     @default(100000)
+  unpaid_fee Int     @default(0)
+  users      users   @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model users {
+  id                String              @id @db.VarChar(64)
+  name              String              @db.VarChar(150)
+  email             String              @unique @db.VarChar(180)
+  password_hash     String              @db.VarChar(255)
+  phone             String              @db.VarChar(20)
+  role              user_role
+  status            account_status      @default(ACTIVE)
+  citizen_id        String?             @db.VarChar(32)
+  reject_reason     String?
+  created_at        DateTime            @default(now()) @db.Timestamptz(6)
+  auth_sessions     auth_sessions[]
+  bookings          bookings[]
+  charging_sessions charging_sessions[]
+  dispatch_orders   dispatch_orders[]
+  incidents         incidents[]
+  operator_profiles operator_profiles?
+  parking_bookings  parking_bookings[]
+  private_vehicles  private_vehicles[]
+  rentals           rentals[]
+  student_profiles  student_profiles?
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model vehicles {
+  id                   String                 @id @db.VarChar(64)
+  plate_number         String                 @unique @db.VarChar(32)
+  type                 String                 @db.VarChar(64)
+  hub_id               String?                @db.VarChar(64)
+  battery_soc          Int
+  status               vehicle_status         @default(AVAILABLE)
+  model                String                 @db.VarChar(120)
+  bay_code             String?                @db.VarChar(32)
+  qr_code              String?                @unique @db.VarChar(64)
+  bookings             bookings[]
+  charging_sessions    charging_sessions[]
+  dispatch_order_items dispatch_order_items[]
+  incidents            incidents[]
+  rentals              rentals[]
+  hubs                 hubs?                  @relation(fields: [hub_id], references: [id], onUpdate: NoAction)
+
+  @@index([hub_id, status], map: "idx_vehicles_hub_status")
+}
+
+enum account_status {
+  ACTIVE
+  PENDING_APPROVAL
+  LOCKED
+  REJECTED
+  DELETED
+}
+
+enum audit_category {
+  QUAN_TRI
+  CANH_BAO
+  API
+  VAN_HANH
+}
+
+enum audit_status {
+  SUCCESS
+  WARNING
+  ERROR
+}
+
+enum booking_status {
+  ACTIVE
+  CANCELLED
+  COMPLETED
+  EXPIRED
+}
+
+enum charging_point_status {
+  AVAILABLE
+  CHARGING
+  RESERVED
+  MAINTENANCE
+}
+
+enum charging_session_status {
+  SCHEDULED
+  CHARGING
+  COMPLETED
+  CANCELLED
+}
+
+enum dispatch_status {
+  IN_TRANSIT
+  COMPLETED
+  CANCELLED
+}
+
+enum incident_resource_type {
+  VEHICLE
+  CHARGING_POINT
+}
+
+enum incident_status {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+}
+
+enum rental_status {
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+enum user_role {
+  STUDENT
+  OPERATOR
+  ADMIN
+}
+
+enum vehicle_status {
+  AVAILABLE
+  BOOKED
+  IN_USE
+  CHARGING
+  UNDER_MAINTENANCE
+  FAULTY
+}

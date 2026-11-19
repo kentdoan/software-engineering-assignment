@@ -1,0 +1,56 @@
+services:
+  postgres:
+    image: postgres:18-alpine
+    container_name: semh-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-semh_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-semh_password}
+      POSTGRES_DB: ${POSTGRES_DB:-smart_emobility}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql
+      - ./database/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-semh_user} -d ${POSTGRES_DB:-smart_emobility}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: semh-backend
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      PORT: 3000
+      DATABASE_URL: postgresql://${POSTGRES_USER:-semh_user}:${POSTGRES_PASSWORD:-semh_password}@postgres:5432/${POSTGRES_DB:-smart_emobility}?schema=public
+      JWT_SECRET: ${JWT_SECRET:-vnu-hcm-smart-emobility-hub-jwt-secret-2026}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-24h}
+      SEED_SQL_PATH: /app/database/init/02_seed.sql
+      FRONTEND_ORIGIN: http://localhost:5173
+    volumes:
+      - ./database/init:/app/database/init:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/stats"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: semh-frontend
+    ports:
+      - "127.0.0.1:5173:80"
+    depends_on:
+      - backend
+
+volumes:
+  pgdata:

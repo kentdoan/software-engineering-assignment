@@ -1,0 +1,5 @@
+Kính gửi Thầy,
+
+Kính mời Thầy mở tệp README.md trong cùng thư mục này để xem hướng dẫn chi tiết cách khởi chạy hệ thống bằng Docker Compose và danh sách tài khoản mẫu để kiểm thử.
+
+Trân trọng cảm ơn Thầy.
