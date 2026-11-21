@@ -21,7 +21,7 @@ docker compose ps
 
 ## 3. Truy cập ứng dụng
 - **Giao diện Web:** `http://localhost:5173`
-- **Backend API:** `http://localhost:3000/api/stats`
+- **Backend API:** `http://localhost:3000/api/health`
 
 ## 4. Tài khoản mẫu
 Mật khẩu mặc định là `123456` (có thể chọn nhanh trực tiếp trên trang đăng nhập):
@@ -29,7 +29,7 @@ Mật khẩu mặc định là `123456` (có thể chọn nhanh trực tiếp tr
 | Vai trò | Email | Mật khẩu |
 | --- | --- | --- |
 | Sinh viên | `a.nguyen23@vnuhcm.edu.vn` | `123456` |
-| Điều phối viên | `tien.le@emobility.vnuhcm.edu.vn` | `123456` |
+| Nhân viên vận hành | `tien.le@emobility.vnuhcm.edu.vn` | `123456` |
 | Quản trị viên | `admin@emobility.vnuhcm.edu.vn` | `123456` |
 
 ## 5. Dừng và đặt lại dữ liệu

@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Post } from '@nestjs/common';
-import { Scenario, SimulationStatus } from '../common/types';
+import { Scenario, SimulationStatus } from '../common/interfaces';
 import { CreateSimulationDto } from './dto/create-simulation.dto';
 import { SimulationService } from './simulation.service';
 
@@ -8,7 +8,7 @@ export class SimulationController {
   constructor(private readonly simulationService: SimulationService) {}
 
   @Get('scenarios')
-  getScenarios(): Promise<Scenario[]> {
+  getBaselineData(): Promise<Scenario[]> {
     return this.simulationService.getScenarios();
   }
 
@@ -18,13 +18,13 @@ export class SimulationController {
   }
 
   @Post('start')
-  startSimulation(@Body() dto: CreateSimulationDto): Promise<SimulationStatus> {
+  runWhatIfSimulation(@Body() dto: CreateSimulationDto): Promise<SimulationStatus> {
     return this.simulationService.startSimulation(dto);
   }
 
   @Post('step')
   stepSimulation(): Promise<SimulationStatus> {
-    return this.simulationService.stepSimulation();
+    return this.simulationService.executeWhatIfEngine();
   }
 
   @Post('pause')

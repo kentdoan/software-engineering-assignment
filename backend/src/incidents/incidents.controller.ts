@@ -20,7 +20,7 @@ export class IncidentsController {
   }
 
   @Post(':id/resolve')
-  resolveIncident(
+  updateIncidentStatus(
     @Param('id') id: string,
     @Headers('authorization') authorization?: string,
   ) {

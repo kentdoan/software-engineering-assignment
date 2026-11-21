@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
-import { generateId } from '../common/id.helpers';
-import { AuditCategory, AuditLogEntry } from '../common/types';
-import { mapAuditLogFromPrisma } from '../common/mappers.helpers';
+import { AuditCategory, AuditLogEntry } from '../common/interfaces';
+import { mapAuditLogFromPrisma } from '../common/mappers';
+import { generateId } from '../common/utils/id-generator.util';
 import { PrismaService } from '../prisma/prisma.service';
 
 export interface AppendAuditInput {
@@ -17,6 +17,10 @@ export interface AppendAuditInput {
 export class AuditService {
   constructor(private readonly prisma: PrismaService) {}
 
+  /**
+   * Mục đích: Ghi nhận một dòng nhật ký kiểm toán mới cho mọi hành động quan trọng trong hệ thống.
+   * Cách hoạt động: Sinh mã nhật ký duy nhất, điền địa chỉ IP mặc định và trạng thái SUCCESS nếu chưa được truyền vào, lưu bản ghi vào bảng audit_logs rồi trả về đối tượng AuditLogEntry đã chuẩn hóa.
+   */
   async log(input: AppendAuditInput): Promise<AuditLogEntry> {
     const created = await this.prisma.audit_logs.create({
       data: {

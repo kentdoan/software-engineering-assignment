@@ -7,10 +7,16 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { AuditService } from '../audit/audit.service';
-import { extractBearerToken, generateId, hashPassword, sanitizeUser, verifyPassword } from '../common/id.helpers';
-import { mapUserFromPrisma } from '../common/mappers.helpers';
-import { User, UserRole } from '../common/types';
-import { isValidEmail, isValidPasswordStrength, isValidPhone } from '../common/validation.helpers';
+import { AccountStatus, User, UserRole } from '../common/interfaces';
+import { mapUserFromPrisma } from '../common/mappers';
+import { comparePassword, hashPassword } from '../common/security/password.util';
+import { extractBearerToken, sanitizeUser } from '../common/security/token.util';
+import { generateId } from '../common/utils/id-generator.util';
+import {
+  isValidEmail,
+  validatePasswordStrength,
+  validatePhoneNumber,
+} from '../common/validators/account.validator';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateAuthDto, LoginDto } from './dto/create-auth.dto';
 
@@ -22,65 +28,97 @@ export class AuthService {
     private readonly auditService: AuditService,
   ) {}
 
-  async login(dto: LoginDto) {
-    const email = (dto.email || '').trim().toLowerCase();
-    const password = dto.password || '';
+  /**
+   * Mục đích: Kiểm tra thông tin email, mật khẩu và trạng thái hoạt động của tài khoản trước khi cấp phiên đăng nhập.
+   * Cách hoạt động: Chuẩn hóa email, truy vấn người dùng chưa bị xóa kèm hồ sơ sinh viên/nhân viên vận hành, đối chiếu mật khẩu băm qua comparePassword (ghi nhật ký cảnh báo nếu sai), rồi kiểm tra và từ chối nếu tài khoản đang chờ duyệt, bị từ chối hoặc bị khóa.
+   */
+  async validateCredentials(email: string, plainPass: string) {
+    const normalizedEmail = (email || '').trim().toLowerCase();
+    const password = plainPass || '';
 
-    if (!email || !password) {
+    if (!normalizedEmail || !password) {
       throw new BadRequestException('Vui lòng nhập đầy đủ email và mật khẩu.');
     }
 
     const userRow = await this.prisma.users.findFirst({
-      where: { email: { equals: email, mode: 'insensitive' }, status: { not: 'DELETED' } },
+      where: { email: { equals: normalizedEmail, mode: 'insensitive' }, status: { not: 'DELETED' } },
       include: { student_profiles: true, operator_profiles: true },
     });
 
-    const passwordValid = userRow ? await verifyPassword(password, userRow.password_hash) : false;
+    let passwordValid = false;
+    if (userRow) {
+      passwordValid = await comparePassword(password, userRow.password_hash);
+    }
+
     if (!userRow || !passwordValid) {
       await this.auditService.log({
         category: 'QUAN_TRI',
-        actorName: email || 'Khách',
+        actorName: normalizedEmail || 'Khách',
         actorId: 'anonymous',
-        description: `Đăng nhập thất bại cho tài khoản ${email}`,
+        description: `Đăng nhập thất bại cho tài khoản ${normalizedEmail}`,
         status: 'WARNING',
       });
       throw new UnauthorizedException('Email hoặc mật khẩu không chính xác.');
     }
 
     if (userRow.status === 'PENDING_APPROVAL') {
-      throw new ForbiddenException('Tài khoản Điều phối viên đang chờ Quản trị viên phê duyệt.');
+      throw new ForbiddenException('Tài khoản Nhân viên vận hành đang chờ Quản trị viên phê duyệt.');
     }
     if (userRow.status === 'REJECTED') {
-      throw new ForbiddenException(
-        `Đăng ký đã bị từ chối${userRow.reject_reason ? `: ${userRow.reject_reason}` : '.'}`,
-      );
+      let rejectMessage = 'Đăng ký đã bị từ chối.';
+      if (userRow.reject_reason) {
+        rejectMessage = `Đăng ký đã bị từ chối: ${userRow.reject_reason}`;
+      }
+      throw new ForbiddenException(rejectMessage);
     }
     if (userRow.status === 'LOCKED') {
       throw new ForbiddenException('Tài khoản hiện đang bị khóa. Vui lòng liên hệ Quản trị viên.');
     }
 
+    return userRow;
+  }
+
+  /**
+   * Mục đích: Khởi tạo phiên làm việc trong cơ sở dữ liệu và ký chuỗi JWT cho người dùng đã xác thực.
+   * Cách hoạt động: Xóa các phiên đã quá hạn khỏi bảng auth_sessions, tạo bản ghi phiên mới có thời hạn 24 giờ gắn mã jti duy nhất và ký token JWT chứa thông tin định danh cùng vai trò người dùng.
+   */
+  async generateJwtTokens(userId: string, role: UserRole) {
     const now = new Date();
     const expiresAt = new Date(now.getTime() + 24 * 60 * 60 * 1000);
     const jti = generateId('jti');
 
-    await this.prisma.$transaction(async (tx) => {
-      await tx.auth_sessions.deleteMany({ where: { expires_at: { lte: now } } });
-      await tx.auth_sessions.create({
-        data: {
-          jti,
-          user_id: userRow.id,
-          role: userRow.role,
-          created_at: now,
-          expires_at: expiresAt,
-        },
-      });
+    await this.prisma.auth_sessions.deleteMany({
+      where: { expires_at: { lte: now } },
+    });
+    await this.prisma.auth_sessions.create({
+      data: {
+        jti,
+        user_id: userId,
+        role,
+        created_at: now,
+        expires_at: expiresAt,
+      },
     });
 
     const token = await this.jwtService.signAsync({
-      sub: userRow.id,
+      sub: userId,
       jti,
-      role: userRow.role,
+      role,
     });
+
+    return {
+      token,
+      expiresAt: expiresAt.toISOString(),
+    };
+  }
+
+  /**
+   * Mục đích: Xử lý toàn bộ quy trình đăng nhập hệ thống từ kiểm tra thông tin đến cấp phát token và ghi nhật ký.
+   * Cách hoạt động: Gọi validateCredentials để xác thực tài khoản và trạng thái, gọi generateJwtTokens để tạo JWT và lưu phiên đăng nhập, ghi nhận sự kiện vào nhật ký hệ thống rồi trả về token kèm thông tin người dùng đã làm sạch.
+   */
+  async login(dto: LoginDto) {
+    const userRow = await this.validateCredentials(dto.email, dto.password);
+    const { token, expiresAt } = await this.generateJwtTokens(userRow.id, userRow.role);
 
     await this.auditService.log({
       category: 'QUAN_TRI',
@@ -92,17 +130,25 @@ export class AuthService {
 
     return {
       token,
-      expiresAt: expiresAt.toISOString(),
+      expiresAt,
       user: sanitizeUser(mapUserFromPrisma(userRow)),
     };
   }
 
-  async register(dto: CreateAuthDto) {
+  /**
+   * Mục đích: Đăng ký tài khoản mới cho Sinh viên hoặc Nhân viên vận hành.
+   * Cách hoạt động: Kiểm tra tính hợp lệ của họ tên, email, số điện thoại, độ mạnh mật khẩu và kiểm tra trùng lặp email, mã sinh viên hoặc mã nhân viên; sau đó băm mật khẩu, tạo bản ghi trong bảng users kèm hồ sơ tương ứng (Sinh viên có trạng thái ACTIVE, Nhân viên vận hành ở trạng thái PENDING_APPROVAL chờ duyệt) rồi ghi nhật ký hệ thống.
+   */
+  async registerUser(dto: CreateAuthDto) {
     const name = (dto.name || '').trim();
     const email = (dto.email || '').trim().toLowerCase();
     const password = dto.password || '';
     const phone = (dto.phone || '').trim();
-    const requestedRole: UserRole = dto.role === 'OPERATOR' ? 'OPERATOR' : 'STUDENT';
+
+    let requestedRole: UserRole = 'STUDENT';
+    if (dto.role === 'OPERATOR') {
+      requestedRole = 'OPERATOR';
+    }
 
     if (!name || !email || !password || !phone) {
       throw new BadRequestException('Vui lòng điền đầy đủ họ tên, email, số điện thoại và mật khẩu.');
@@ -110,10 +156,10 @@ export class AuthService {
     if (!isValidEmail(email)) {
       throw new BadRequestException('Định dạng email không hợp lệ.');
     }
-    if (!isValidPhone(phone)) {
+    if (!validatePhoneNumber(phone)) {
       throw new BadRequestException('Số điện thoại phải gồm 10 chữ số và bắt đầu bằng số 0.');
     }
-    if (!isValidPasswordStrength(password)) {
+    if (!validatePasswordStrength(password)) {
       throw new BadRequestException('Mật khẩu phải có ít nhất 6 ký tự.');
     }
 
@@ -124,7 +170,7 @@ export class AuthService {
       throw new ConflictException('Email này đã được đăng ký trong hệ thống.');
     }
 
-    if (requestedRole === 'STUDENT' && dto.studentId?.trim()) {
+    if (requestedRole === 'STUDENT' && dto.studentId && dto.studentId.trim()) {
       const sid = dto.studentId.trim();
       const duplicateStudent = await this.prisma.student_profiles.findFirst({
         where: { student_id: sid, users: { status: { not: 'DELETED' } } },
@@ -135,8 +181,8 @@ export class AuthService {
     }
 
     if (requestedRole === 'OPERATOR') {
-      if (!dto.staffId?.trim()) {
-        throw new BadRequestException('Điều phối viên cần cung cấp Mã nhân viên công tác.');
+      if (!dto.staffId || !dto.staffId.trim()) {
+        throw new BadRequestException('Nhân viên vận hành cần cung cấp Mã nhân viên công tác.');
       }
       const duplicateActiveStaff = await this.prisma.operator_profiles.findFirst({
         where: { staff_id: dto.staffId.trim(), users: { status: 'ACTIVE' } },
@@ -147,66 +193,80 @@ export class AuthService {
     }
 
     const pwHash = await hashPassword(password);
-    const userId = generateId(requestedRole === 'OPERATOR' ? 'user-ops' : 'user-stu');
+    let userIdPrefix = 'user-stu';
+    let initialStatus: AccountStatus = 'ACTIVE';
+    if (requestedRole === 'OPERATOR') {
+      userIdPrefix = 'user-ops';
+      initialStatus = 'PENDING_APPROVAL';
+    }
+    const userId = generateId(userIdPrefix);
 
-    const createdRow = await this.prisma.$transaction(async (tx) => {
-      return tx.users.create({
-        data: {
-          id: userId,
-          name,
-          email,
-          password_hash: pwHash,
-          phone,
-          role: requestedRole,
-          status: requestedRole === 'OPERATOR' ? 'PENDING_APPROVAL' : 'ACTIVE',
-          citizen_id: dto.citizenId?.trim() || null,
-          ...(requestedRole === 'STUDENT'
-            ? {
-                student_profiles: {
-                  create: {
-                    id: generateId('sp'),
-                    student_id: dto.studentId?.trim() || '',
-                    university: dto.university?.trim() || 'ĐHQG-HCM',
-                    balance: 100000,
-                    unpaid_fee: 0,
-                  },
-                },
-              }
-            : {
-                operator_profiles: {
-                  create: {
-                    id: generateId('op'),
-                    staff_id: dto.staffId!.trim(),
-                    department: dto.department?.trim() || 'Vận hành Hub',
-                  },
-                },
-              }),
-        },
-        include: { student_profiles: true, operator_profiles: true },
-      });
+    await this.prisma.users.create({
+      data: {
+        id: userId,
+        name,
+        email,
+        password_hash: pwHash,
+        phone,
+        role: requestedRole,
+        status: initialStatus,
+        citizen_id: dto.citizenId ? dto.citizenId.trim() : null,
+      },
     });
+
+    if (requestedRole === 'STUDENT') {
+      await this.prisma.student_profiles.create({
+        data: {
+          id: generateId('sp'),
+          user_id: userId,
+          student_id: dto.studentId ? dto.studentId.trim() : '',
+          university: dto.university ? dto.university.trim() : 'ĐHQG-HCM',
+          balance: 100000,
+          unpaid_fee: 0,
+        },
+      });
+    } else {
+      await this.prisma.operator_profiles.create({
+        data: {
+          id: generateId('op'),
+          user_id: userId,
+          staff_id: dto.staffId!.trim(),
+          department: dto.department ? dto.department.trim() : 'Vận hành Hub',
+        },
+      });
+    }
+
+    const createdRow = await this.prisma.users.findUniqueOrThrow({
+      where: { id: userId },
+      include: { student_profiles: true, operator_profiles: true },
+    });
+
+    let auditDescription = `Đăng ký tài khoản Sinh viên mới (${createdRow.email})`;
+    let responseMessage = 'Đăng ký tài khoản Sinh viên thành công. Bạn có thể đăng nhập ngay.';
+    if (requestedRole === 'OPERATOR') {
+      auditDescription = `Gửi hồ sơ đăng ký Nhân viên vận hành (${createdRow.email}) chờ phê duyệt`;
+      responseMessage = 'Đăng ký thành công. Tài khoản Nhân viên vận hành đang chờ Quản trị viên phê duyệt.';
+    }
 
     await this.auditService.log({
       category: 'QUAN_TRI',
       actorName: createdRow.name,
       actorId: createdRow.id,
-      description:
-        requestedRole === 'OPERATOR'
-          ? `Gửi hồ sơ đăng ký Điều phối viên (${createdRow.email}) chờ phê duyệt`
-          : `Đăng ký tài khoản Sinh viên mới (${createdRow.email})`,
+      description: auditDescription,
       status: 'SUCCESS',
     });
 
     return {
-      message:
-        requestedRole === 'OPERATOR'
-          ? 'Đăng ký thành công. Tài khoản Điều phối viên đang chờ Quản trị viên phê duyệt.'
-          : 'Đăng ký tài khoản Sinh viên thành công. Bạn có thể đăng nhập ngay.',
+      message: responseMessage,
       user: sanitizeUser(mapUserFromPrisma(createdRow)),
     };
   }
 
-  async logout(authorizationHeader?: string) {
+  /**
+   * Mục đích: Đăng xuất tài khoản và thu hồi phiên đăng nhập hiện tại để token cũ không thể tái sử dụng.
+   * Cách hoạt động: Tách token từ header Authorization, giải mã JWT để lấy mã phiên jti và mã người dùng, xóa phiên tương ứng khỏi bảng auth_sessions rồi ghi nhật ký đăng xuất nếu xác định được người dùng.
+   */
+  async revokeSession(authorizationHeader?: string) {
     const token = extractBearerToken(authorizationHeader);
     let actorUser: User | null = null;
 
@@ -222,7 +282,7 @@ export class AuthService {
         }
         await this.prisma.auth_sessions.deleteMany({ where: { jti: payload.jti } });
       } catch {
-        // Token already expired or invalid
+        actorUser = null;
       }
     }
 
@@ -239,6 +299,27 @@ export class AuthService {
     return { message: 'Đăng xuất thành công.' };
   }
 
+  /**
+   * Mục đích: Truy xuất thông tin người dùng dự phòng khi yêu cầu không gửi kèm token ở các API cho phép chế độ mặc định.
+   * Cách hoạt động: Tìm bản ghi người dùng theo fallbackUserId trong bảng users (bỏ qua tài khoản đã xóa) và trả về mã người dùng cùng đối tượng User đã chuyển đổi.
+   */
+  private async resolveFallbackUser(
+    fallbackUserId: string,
+  ): Promise<{ userId: string; user: User | null }> {
+    const fallback = await this.prisma.users.findFirst({
+      where: { id: fallbackUserId, status: { not: 'DELETED' } },
+      include: { student_profiles: true, operator_profiles: true },
+    });
+    return {
+      userId: fallback?.id || fallbackUserId,
+      user: fallback ? mapUserFromPrisma(fallback) : null,
+    };
+  }
+
+  /**
+   * Mục đích: Xác định người dùng hiện đang thực hiện yêu cầu dựa trên JWT trong header hoặc tài khoản dự phòng.
+   * Cách hoạt động: Tách và xác thực chữ ký JWT từ header Authorization, kiểm tra phiên làm việc trong bảng auth_sessions còn hạn và tài khoản không bị khóa/xóa; nếu thiếu hoặc lỗi token thì ném lỗi UnauthorizedException khi bắt buộc đăng nhập, hoặc trả về người dùng dự phòng khi không bắt buộc.
+   */
   async resolveSession(
     authorizationHeader?: string,
     required = false,
@@ -249,14 +330,7 @@ export class AuthService {
       if (required) {
         throw new UnauthorizedException('Phiên đăng nhập không hợp lệ hoặc đã hết hạn.');
       }
-      const fallback = await this.prisma.users.findFirst({
-        where: { id: fallbackUserId, status: { not: 'DELETED' } },
-        include: { student_profiles: true, operator_profiles: true },
-      });
-      return {
-        userId: fallback?.id || fallbackUserId,
-        user: fallback ? mapUserFromPrisma(fallback) : null,
-      };
+      return this.resolveFallbackUser(fallbackUserId);
     }
 
     let payload: { jti: string; sub: string };
@@ -266,14 +340,7 @@ export class AuthService {
       if (required) {
         throw new UnauthorizedException('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
       }
-      const fallback = await this.prisma.users.findFirst({
-        where: { id: fallbackUserId, status: { not: 'DELETED' } },
-        include: { student_profiles: true, operator_profiles: true },
-      });
-      return {
-        userId: fallback?.id || fallbackUserId,
-        user: fallback ? mapUserFromPrisma(fallback) : null,
-      };
+      return this.resolveFallbackUser(fallbackUserId);
     }
 
     const session = await this.prisma.auth_sessions.findUnique({
@@ -285,23 +352,17 @@ export class AuthService {
       },
     });
 
-    if (
+    const isSessionInvalid =
       !session ||
       session.expires_at.getTime() <= Date.now() ||
       session.users.status === 'DELETED' ||
-      session.users.status === 'LOCKED'
-    ) {
+      session.users.status === 'LOCKED';
+
+    if (isSessionInvalid) {
       if (required) {
         throw new UnauthorizedException('Phiên đăng nhập không còn hiệu lực. Vui lòng đăng nhập lại.');
       }
-      const fallback = await this.prisma.users.findFirst({
-        where: { id: fallbackUserId, status: { not: 'DELETED' } },
-        include: { student_profiles: true, operator_profiles: true },
-      });
-      return {
-        userId: fallback?.id || fallbackUserId,
-        user: fallback ? mapUserFromPrisma(fallback) : null,
-      };
+      return this.resolveFallbackUser(fallbackUserId);
     }
 
     return {
@@ -310,6 +371,10 @@ export class AuthService {
     };
   }
 
+  /**
+   * Mục đích: Trả về thông tin tài khoản hiện đang đăng nhập dựa trên token xác thực hợp lệ.
+   * Cách hoạt động: Gọi hàm resolveSession với cờ bắt buộc xác thực là true, sau đó loại bỏ thông tin nhạy cảm bằng sanitizeUser trước khi trả về.
+   */
   async me(authorizationHeader?: string) {
     const resolved = await this.resolveSession(authorizationHeader, true);
     return { user: sanitizeUser(resolved.user!) };

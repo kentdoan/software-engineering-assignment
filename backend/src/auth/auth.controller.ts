@@ -13,12 +13,12 @@ export class AuthController {
 
   @Post('register')
   register(@Body() dto: CreateAuthDto) {
-    return this.authService.register(dto);
+    return this.authService.registerUser(dto);
   }
 
   @Post('logout')
   logout(@Headers('authorization') authorization?: string) {
-    return this.authService.logout(authorization);
+    return this.authService.revokeSession(authorization);
   }
 
   @Get('me')

@@ -1,5 +1,5 @@
 import { Controller, Get, Param, Query } from '@nestjs/common';
-import { Hub } from '../common/types';
+import { Hub } from '../common/interfaces';
 import { HubsService } from './hubs.service';
 
 @Controller('hubs')
@@ -7,7 +7,7 @@ export class HubsController {
   constructor(private readonly hubsService: HubsService) {}
 
   @Get()
-  findAll(
+  searchHubs(
     @Query('q') q?: string,
     @Query('lat') lat?: string,
     @Query('lng') lng?: string,
@@ -16,7 +16,7 @@ export class HubsController {
     @Query('hasAvailableDocks') hasAvailableDocks?: string,
     @Query('hasAvailableCharging') hasAvailableCharging?: string,
   ): Promise<Hub[]> {
-    return this.hubsService.findAll({
+    return this.hubsService.findHubsWithinRadius({
       q,
       lat: lat !== undefined && lat !== '' ? Number(lat) : undefined,
       lng: lng !== undefined && lng !== '' ? Number(lng) : undefined,
@@ -28,7 +28,7 @@ export class HubsController {
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string): Promise<Hub> {
-    return this.hubsService.findOne(id);
+  getHubDetails(@Param('id') id: string): Promise<Hub> {
+    return this.hubsService.getHubResourceSnapshot(id);
   }
 }

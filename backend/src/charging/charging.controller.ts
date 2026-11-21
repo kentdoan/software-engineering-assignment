@@ -28,21 +28,21 @@ export class ChargingController {
   }
 
   @Get('points')
-  listChargingPoints(@Query('hubId') hubId?: string) {
+  getChargingScheduleData(@Query('hubId') hubId?: string) {
     return this.chargingService.listChargingPoints(hubId);
   }
 
   @Post('slots/propose')
-  proposeSlots(@Body() dto: ProposeSlotsDto) {
-    return this.chargingService.proposeSlots(dto);
+  getAvailableChargingSlots(@Body() dto: ProposeSlotsDto) {
+    return this.chargingService.findOptimalChargingSlot(dto);
   }
 
   @Post('bookings')
-  bookPrivateChargingSlot(
+  bookPrivateChargingSchedule(
     @Headers('authorization') authorization: string | undefined,
     @Body() dto: CreateChargingDto,
   ) {
-    return this.chargingService.bookPrivateChargingSlot(authorization, dto);
+    return this.chargingService.createPrivateChargingSession(authorization, dto);
   }
 
   @Get('bookings')
@@ -63,18 +63,18 @@ export class ChargingController {
   }
 
   @Get('priority-list')
-  getPriorityPlan(
+  requestInitialSchedule(
     @Query('hubId') hubId?: string,
     @Query('excludePortIds') excludePortIds?: string,
   ) {
-    return this.chargingService.getPriorityPlan(hubId, excludePortIds);
+    return this.chargingService.optimizeChargingSchedule(hubId, excludePortIds);
   }
 
   @Post('schedule/apply')
-  applySmartSchedule(
+  applySchedule(
     @Headers('authorization') authorization: string | undefined,
     @Body() dto: ApplySmartScheduleDto,
   ) {
-    return this.chargingService.applySmartSchedule(authorization, dto);
+    return this.chargingService.commitSchedulePlan(authorization, dto);
   }
 }

@@ -27,7 +27,7 @@ export class RentalsController {
   }
 
   @Get('history')
-  getRentalHistory(
+  getTripHistory(
     @Headers('authorization') authorization?: string,
     @Query('userId') userId?: string,
   ) {
@@ -35,11 +35,11 @@ export class RentalsController {
   }
 
   @Post('return')
-  returnActiveVehicle(
+  returnVehicle(
     @Headers('authorization') authorization: string | undefined,
     @Body() dto: UpdateRentalDto,
   ) {
-    return this.rentalsService.returnVehicle(authorization, dto);
+    return this.rentalsService.endTrip(authorization, dto);
   }
 
   @Post(':rentalId/return')
@@ -48,7 +48,7 @@ export class RentalsController {
     @Headers('authorization') authorization: string | undefined,
     @Body() dto: UpdateRentalDto,
   ) {
-    return this.rentalsService.returnVehicle(authorization, {
+    return this.rentalsService.endTrip(authorization, {
       ...dto,
       rentalId,
     });

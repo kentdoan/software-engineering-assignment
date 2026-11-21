@@ -17,10 +17,18 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
     this.pool = pool;
   }
 
+  /**
+   * Mục đích: Thiết lập kết nối tới cơ sở dữ liệu PostgreSQL ngay khi module Prisma được khởi tạo.
+   * Cách hoạt động: Gọi phương thức $connect của PrismaClient để mở kết nối thông qua Pool đã cấu hình.
+   */
   async onModuleInit(): Promise<void> {
     await this.$connect();
   }
 
+  /**
+   * Mục đích: Đóng kết nối cơ sở dữ liệu và giải phóng hồ kết nối PostgreSQL khi ứng dụng dừng hoạt động.
+   * Cách hoạt động: Ngắt kết nối PrismaClient bằng $disconnect rồi đóng toàn bộ kết nối trong Pool.
+   */
   async onModuleDestroy(): Promise<void> {
     await this.$disconnect();
     await this.pool.end();

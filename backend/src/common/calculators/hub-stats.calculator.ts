@@ -1,25 +1,20 @@
-import { calculateHaversineKm } from './geo.helpers';
 import {
   ChargingPoint,
   Hub,
   HubAlert,
+  HubSearchQuery,
   HubStatus,
   IncidentReport,
   MonitoringStats,
   ParkingBooking,
   Vehicle,
-} from './types';
+} from '../interfaces';
+import { calculateHaversineDistance } from '../utils/geo.util';
 
-export interface HubSearchQuery {
-  q?: string;
-  lat?: number;
-  lng?: number;
-  radiusKm?: number;
-  hasAvailableVehicles?: boolean;
-  hasAvailableDocks?: boolean;
-  hasAvailableCharging?: boolean;
-}
-
+/**
+ * Mục đích: Tổng hợp toàn bộ số liệu vận hành và đánh giá trạng thái hiện thời của một trạm Hub.
+ * Cách hoạt động: Đếm số xe theo từng trạng thái tại trạm kết hợp số lượt đặt chỗ đỗ xe cá nhân còn hiệu lực để tính số ô đỗ trống và số trụ sạc khả dụng, từ đó phân loại trạng thái trạm thành NORMAL, LOW_VEHICLES hoặc HIGH_OCCUPANCY.
+ */
 export function computeHubStats(
   hub: Hub,
   vehicles: Vehicle[],
@@ -70,6 +65,10 @@ export function computeHubStats(
   };
 }
 
+/**
+ * Mục đích: Lọc và sắp xếp danh sách các trạm Hub theo từ khóa, bán kính địa lý và điều kiện tài nguyên khả dụng.
+ * Cách hoạt động: Nếu có tọa độ người dùng thì tính khoảng cách Haversine cho từng trạm, sau đó lọc theo tên, bán kính và cờ còn xe, còn chỗ đỗ hoặc còn trụ sạc, cuối cùng sắp xếp theo khoảng cách gần nhất hoặc theo bảng chữ cái tiếng Việt.
+ */
 export function filterHubsList(
   hubs: Hub[],
   query: HubSearchQuery,
@@ -84,7 +83,7 @@ export function filterHubsList(
   return hubs
     .map((hub) => {
       if (!hasOrigin) return hub;
-      const distanceKm = calculateHaversineKm(query.lat!, query.lng!, hub.latitude, hub.longitude);
+      const distanceKm = calculateHaversineDistance(query.lat!, query.lng!, hub.latitude, hub.longitude);
       return { ...hub, distanceKm };
     })
     .filter((hub) => {
@@ -119,6 +118,10 @@ export function filterHubsList(
     });
 }
 
+/**
+ * Mục đích: Phát hiện và tạo danh sách cảnh báo vận hành cho các trạm Hub vượt ngưỡng an toàn.
+ * Cách hoạt động: Duyệt qua từng trạm đã tính thống kê để kiểm tra 3 ngưỡng cảnh báo gồm thiếu xe (tối đa 2 xe sẵn sàng), sắp đầy bãi đỗ (tối đa 2 ô trống) và quá tải trụ sạc hoặc nhiều xe pin yếu dưới 20%, gán mức độ WARNING hoặc CRITICAL tương ứng.
+ */
 export function buildHubAlerts(
   enrichedHubs: Hub[],
   vehicles: Vehicle[],
@@ -180,6 +183,10 @@ export function buildHubAlerts(
   return alerts;
 }
 
+/**
+ * Mục đích: Tính toán các chỉ số thống kê tổng quan sức khỏe toàn mạng lưới cho màn hình giám sát điều hành.
+ * Cách hoạt động: Đếm số lượng trạm, số lượng xe theo từng trạng thái, số trụ sạc rảnh, số sự cố chưa xử lý xong và tính tỷ lệ phần trăm xe khỏe mạnh trên tổng số xe.
+ */
 export function computeMonitoringStats(
   hubs: Hub[],
   vehicles: Vehicle[],

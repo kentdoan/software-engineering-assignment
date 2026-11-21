@@ -7,19 +7,19 @@ export class BookingsController {
   constructor(private readonly bookingsService: BookingsService) {}
 
   @Post()
-  createBooking(
+  reserveSharedVehicle(
     @Headers('authorization') authorization: string | undefined,
     @Body() dto: CreateBookingDto,
   ) {
-    return this.bookingsService.createBooking(authorization, dto);
+    return this.bookingsService.createSharedVehicleBooking(authorization, dto);
   }
 
   @Post('parking')
-  createParkingBooking(
+  reserveParkingSpace(
     @Headers('authorization') authorization: string | undefined,
     @Body() dto: CreateParkingBookingDto,
   ) {
-    return this.bookingsService.createParkingBooking(authorization, dto);
+    return this.bookingsService.createParkingSpaceBooking(authorization, dto);
   }
 
   @Get('active')
@@ -32,11 +32,11 @@ export class BookingsController {
 
   @Post('expire-overdue')
   expireOverdue() {
-    return this.bookingsService.expireOverdue();
+    return this.bookingsService.handleBookingExpiration15Min();
   }
 
   @Post(':id/cancel')
-  cancelBooking(
+  cancelReservation(
     @Param('id') id: string,
     @Headers('authorization') authorization?: string,
   ) {

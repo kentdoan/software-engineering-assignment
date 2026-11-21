@@ -1,23 +1,18 @@
 import { Controller, Get } from '@nestjs/common';
-import { HubAlert, MonitoringStats } from '../common/types';
+import { HubAlert, MonitoringStats } from '../common/interfaces';
 import { MonitoringService } from './monitoring.service';
 
-@Controller()
+@Controller('monitoring')
 export class MonitoringController {
   constructor(private readonly monitoringService: MonitoringService) {}
 
   @Get('stats')
-  getStats(): Promise<MonitoringStats> {
-    return this.monitoringService.getStats();
+  getNetworkOverview(): Promise<MonitoringStats> {
+    return this.monitoringService.getConsolidatedNetworkState();
   }
 
-  @Get('monitoring/stats')
-  getMonitoringStats(): Promise<MonitoringStats> {
-    return this.monitoringService.getStats();
-  }
-
-  @Get('monitoring/alerts')
-  getAlerts(): Promise<HubAlert[]> {
-    return this.monitoringService.getAlerts();
+  @Get('alerts')
+  getActiveAlerts(): Promise<HubAlert[]> {
+    return this.monitoringService.evaluateHubThresholds();
   }
 }

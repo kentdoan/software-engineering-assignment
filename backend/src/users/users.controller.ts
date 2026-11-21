@@ -9,7 +9,7 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
-import { AccountStatus, AuditCategory, UserRole } from '../common/types';
+import { AccountStatus, AuditCategory, UserRole } from '../common/interfaces';
 import { ChangePasswordDto, LockAccountDto, RejectRegistrationDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UsersService } from './users.service';
@@ -19,11 +19,11 @@ export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   @Get('profile')
-  getProfile(
+  getMyProfile(
     @Headers('authorization') authorization?: string,
     @Query('userId') userId?: string,
   ) {
-    return this.usersService.getProfile(authorization, userId);
+    return this.usersService.getUserProfile(authorization, userId);
   }
 
   @Patch('profile')
@@ -31,7 +31,7 @@ export class UsersController {
     @Headers('authorization') authorization: string | undefined,
     @Body() dto: UpdateUserDto,
   ) {
-    return this.usersService.updateProfile(authorization, dto);
+    return this.usersService.updateUserProfile(authorization, dto);
   }
 
   @Post('change-password')
@@ -39,11 +39,11 @@ export class UsersController {
     @Headers('authorization') authorization: string | undefined,
     @Body() dto: ChangePasswordDto,
   ) {
-    return this.usersService.changePassword(authorization, dto);
+    return this.usersService.changeUserPassword(authorization, dto);
   }
 
   @Get('admin/registrations')
-  listRegistrations(@Query('status') status?: string) {
+  getPendingRegistrations(@Query('status') status?: string) {
     return this.usersService.listRegistrations(status);
   }
 
@@ -52,7 +52,7 @@ export class UsersController {
     @Param('id') id: string,
     @Headers('authorization') authorization?: string,
   ) {
-    return this.usersService.approveRegistration(id, authorization);
+    return this.usersService.processApprovalDecision(id, true, undefined, authorization);
   }
 
   @Post('admin/registrations/:id/reject')
@@ -61,11 +61,11 @@ export class UsersController {
     @Body() dto: RejectRegistrationDto,
     @Headers('authorization') authorization?: string,
   ) {
-    return this.usersService.rejectRegistration(id, dto.reason, authorization);
+    return this.usersService.processApprovalDecision(id, false, dto.reason, authorization);
   }
 
   @Get('admin/accounts')
-  listAccounts(
+  getUserList(
     @Query('q') q?: string,
     @Query('role') role?: UserRole | 'ALL',
     @Query('status') status?: AccountStatus | 'ALL',
@@ -74,7 +74,7 @@ export class UsersController {
   }
 
   @Get('admin/accounts/:id/history')
-  getAccountHistory(@Param('id') id: string) {
+  getUserDetailsAndHistory(@Param('id') id: string) {
     return this.usersService.getAccountHistory(id);
   }
 
@@ -84,7 +84,7 @@ export class UsersController {
     @Body() dto: LockAccountDto,
     @Headers('authorization') authorization?: string,
   ) {
-    return this.usersService.lockAccount(id, dto?.reason, authorization);
+    return this.usersService.lockUserAccount(id, dto?.reason, authorization);
   }
 
   @Post('admin/accounts/:id/unlock')
@@ -92,7 +92,7 @@ export class UsersController {
     @Param('id') id: string,
     @Headers('authorization') authorization?: string,
   ) {
-    return this.usersService.unlockAccount(id, authorization);
+    return this.usersService.unlockUserAccount(id, authorization);
   }
 
   @Delete('admin/accounts/:id')
@@ -100,7 +100,7 @@ export class UsersController {
     @Param('id') id: string,
     @Headers('authorization') authorization?: string,
   ) {
-    return this.usersService.deleteAccount(id, authorization);
+    return this.usersService.deleteUserAccount(id, authorization);
   }
 
   @Get('admin/audit-logs')

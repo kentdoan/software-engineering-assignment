@@ -12,11 +12,11 @@ export class DispatchController {
   }
 
   @Post()
-  createOrder(
+  createDispatchOrder(
     @Headers('authorization') authorization: string | undefined,
     @Body() dto: CreateDispatchDto,
   ) {
-    return this.dispatchService.createOrder(authorization, dto);
+    return this.dispatchService.executeDispatchOrder(authorization, dto);
   }
 
   @Post(':id/complete')

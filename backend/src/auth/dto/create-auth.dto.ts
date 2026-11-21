@@ -1,5 +1,5 @@
 import { IsEmail, IsIn, IsOptional, IsString } from 'class-validator';
-import { UserRole } from '../../common/types';
+import { UserRole } from '../../common/interfaces';
 
 export class LoginDto {
   @IsEmail({}, { message: 'Vui lòng nhập email hợp lệ.' })
