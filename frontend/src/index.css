@@ -8,8 +8,11 @@ body {
   color: #1b211e;
 }
 
-/* Custom Leaflet grid canvas styling */
+/* Cô lập ngữ cảnh xếp chồng của Leaflet để không đè lên modal và ngăn kéo toàn trang */
 .leaflet-container {
+  position: relative;
+  z-index: 0;
+  isolation: isolate;
   font-family: 'Roboto', sans-serif;
   background-color: #eef3f0;
   background-image:

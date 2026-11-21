@@ -1,4 +1,4 @@
-import { Hub } from '../types';
+import { Hub } from '../types/hub.types';
 
 export const VNU_DEFAULT_CENTER = {
   latitude: 10.8762,
@@ -16,7 +16,7 @@ export const DEMO_ACCOUNTS = [
   },
   {
     role: 'OPERATOR' as const,
-    label: 'Điều phối viên',
+    label: 'Nhân viên vận hành',
     sublabel: 'Lê Thành Tiến (Vận hành Hub)',
     email: 'tien.le@emobility.vnuhcm.edu.vn',
     password: '123456',

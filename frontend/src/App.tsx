@@ -13,32 +13,32 @@ import {
   Users,
   Wrench,
 } from 'lucide-react';
-import { AdminAccountsView } from './components/admin/AdminAccountsView';
-import { AdminAuditLogsView } from './components/admin/AdminAuditLogsView';
-import { AdminRegistrationsView } from './components/admin/AdminRegistrationsView';
-import { AuthView } from './components/auth/AuthView';
-import { ProfileView } from './components/common/ProfileView';
-import { NavItemConfig, PortalShell } from './components/layout/PortalShell';
-import { OperatorChargingView } from './components/operator/OperatorChargingView';
-import { OperatorDispatchView } from './components/operator/OperatorDispatchView';
-import { OperatorIncidentsView } from './components/operator/OperatorIncidentsView';
-import { OperatorMonitorView } from './components/operator/OperatorMonitorView';
-import { OperatorSimulationView } from './components/operator/OperatorSimulationView';
-import { StudentChargingView } from './components/student/StudentChargingView';
-import { StudentHubExplorer } from './components/student/StudentHubExplorer';
-import { StudentPickupView } from './components/student/StudentPickupView';
-import { StudentReturnTripView } from './components/student/StudentReturnTripView';
-import {
-  authApi,
-  bookingsApi,
-  getAuthToken,
-  getErrorMessage,
-  rentalsApi,
-  resetApi,
-  setAuthToken,
-  usersApi,
-} from './services/api';
-import { ActiveBookingsBundle, Rental, ToastMessage, User } from './types';
+import { PortalShell } from './components/layout/PortalShell';
+import { NavItemConfig } from './components/layout/SidebarNav';
+import { AdminAccountsPage } from './pages/admin/AdminAccountsPage';
+import { AdminAuditLogsPage } from './pages/admin/AdminAuditLogsPage';
+import { AdminRegistrationsPage } from './pages/admin/AdminRegistrationsPage';
+import { AuthPage } from './pages/auth/AuthPage';
+import { OperatorChargingPage } from './pages/operator/OperatorChargingPage';
+import { OperatorDispatchPage } from './pages/operator/OperatorDispatchPage';
+import { OperatorIncidentsPage } from './pages/operator/OperatorIncidentsPage';
+import { OperatorMonitorPage } from './pages/operator/OperatorMonitorPage';
+import { OperatorSimulationPage } from './pages/operator/OperatorSimulationPage';
+import { ProfilePage } from './pages/profile/ProfilePage';
+import { StudentChargingPage } from './pages/student/StudentChargingPage';
+import { StudentExplorePage } from './pages/student/StudentExplorePage';
+import { StudentPickupPage } from './pages/student/StudentPickupPage';
+import { StudentTripPage } from './pages/student/StudentTripPage';
+import { authApi } from './services/auth.api';
+import { bookingsApi } from './services/bookings.api';
+import { getAuthToken, getErrorMessage, setAuthToken } from './services/httpClient';
+import { rentalsApi } from './services/rentals.api';
+import { resetApi } from './services/reset.api';
+import { usersApi } from './services/users.api';
+import { ActiveBookingsBundle } from './types/booking.types';
+import { Rental } from './types/rental.types';
+import { ToastMessage } from './types/ui.types';
+import { User } from './types/user.types';
 
 function defaultTabForRole(role: User['role']): string {
   if (role === 'OPERATOR') return 'opr-monitor';
@@ -141,15 +141,12 @@ export function App() {
   };
 
   const handleResetDemoData = async () => {
+    if (!user || user.role !== 'ADMIN') return;
     try {
       await resetApi.resetData();
       notify('success', 'Đã khôi phục toàn bộ dữ liệu mẫu ban đầu của 6 trạm ĐHQG-HCM.');
-      if (user?.role === 'STUDENT') {
-        await refreshStudentSession();
-      } else if (user?.role === 'ADMIN') {
-        const list = await usersApi.listRegistrations('PENDING_APPROVAL');
-        setPendingOperatorsCount(list.length);
-      }
+      const list = await usersApi.listRegistrations('PENDING_APPROVAL');
+      setPendingOperatorsCount(list.length);
       const prevTab = activeTab;
       setActiveTab('profile');
       setTimeout(() => setActiveTab(prevTab), 10);
@@ -167,7 +164,7 @@ export function App() {
   }
 
   if (!user) {
-    return <AuthView onLoginSuccess={handleLoginSuccess} />;
+    return <AuthPage onLoginSuccess={handleLoginSuccess} />;
   }
 
   const getNavItems = (): NavItemConfig[] => {
@@ -248,8 +245,8 @@ export function App() {
     return [
       {
         id: 'adm-registrations',
-        label: 'Duyệt Điều phối viên',
-        shortLabel: 'Duyệt ĐPV',
+        label: 'Duyệt Nhân viên vận hành',
+        shortLabel: 'Duyệt NVVH',
         badgeCount: pendingOperatorsCount || undefined,
         icon: <UserCheck className="h-5 w-5" />,
       },
@@ -276,16 +273,16 @@ export function App() {
 
   const renderContent = () => {
     if (activeTab === 'profile') {
-      return <ProfileView user={user} onUserUpdated={setUser} notify={notify} />;
+      return <ProfilePage user={user} onUserUpdated={setUser} notify={notify} />;
     }
 
     if (user.role === 'STUDENT') {
       switch (activeTab) {
         case 'stu-explore':
-          return <StudentHubExplorer onBooked={refreshStudentSession} notify={notify} />;
+          return <StudentExplorePage onBooked={refreshStudentSession} notify={notify} />;
         case 'stu-pickup':
           return (
-            <StudentPickupView
+            <StudentPickupPage
               activeBooking={bookingsBundle?.vehicleBooking || null}
               activeRental={activeRental}
               onPickupComplete={async () => {
@@ -297,7 +294,7 @@ export function App() {
           );
         case 'stu-trip':
           return (
-            <StudentReturnTripView
+            <StudentTripPage
               activeBooking={bookingsBundle?.vehicleBooking || null}
               activeParkingBooking={bookingsBundle?.parkingBooking || null}
               activeRental={activeRental}
@@ -306,7 +303,7 @@ export function App() {
             />
           );
         case 'stu-charging':
-          return <StudentChargingView notify={notify} />;
+          return <StudentChargingPage notify={notify} />;
       }
     }
 
@@ -314,7 +311,7 @@ export function App() {
       switch (activeTab) {
         case 'opr-monitor':
           return (
-            <OperatorMonitorView
+            <OperatorMonitorPage
               onGoToDispatch={(targetHubId) => {
                 setDispatchTargetHubId(targetHubId);
                 setActiveTab('opr-dispatch');
@@ -323,13 +320,13 @@ export function App() {
             />
           );
         case 'opr-dispatch':
-          return <OperatorDispatchView initialTargetHubId={dispatchTargetHubId} notify={notify} />;
+          return <OperatorDispatchPage initialTargetHubId={dispatchTargetHubId} notify={notify} />;
         case 'opr-incidents':
-          return <OperatorIncidentsView notify={notify} />;
+          return <OperatorIncidentsPage notify={notify} />;
         case 'opr-charging':
-          return <OperatorChargingView notify={notify} />;
+          return <OperatorChargingPage notify={notify} />;
         case 'opr-simulation':
-          return <OperatorSimulationView notify={notify} />;
+          return <OperatorSimulationPage notify={notify} />;
       }
     }
 
@@ -337,15 +334,15 @@ export function App() {
       switch (activeTab) {
         case 'adm-registrations':
           return (
-            <AdminRegistrationsView
+            <AdminRegistrationsPage
               onPendingCountChange={setPendingOperatorsCount}
               notify={notify}
             />
           );
         case 'adm-accounts':
-          return <AdminAccountsView currentAdminId={user.id} notify={notify} />;
+          return <AdminAccountsPage currentAdminId={user.id} notify={notify} />;
         case 'adm-audit':
-          return <AdminAuditLogsView notify={notify} />;
+          return <AdminAuditLogsPage notify={notify} />;
       }
     }
 
@@ -359,7 +356,7 @@ export function App() {
       activeTab={activeTab}
       onSelectTab={setActiveTab}
       onLogout={handleLogout}
-      onResetDemoData={handleResetDemoData}
+      onResetDemoData={user.role === 'ADMIN' ? handleResetDemoData : undefined}
       toasts={toasts}
       onDismissToast={dismissToast}
     >

@@ -1,30 +1,12 @@
 import React from 'react';
-import {
-  AccountStatus,
-  AuditCategory,
-  ChargingPointStatus,
-  DispatchOrder,
-  HubStatus,
-  IncidentReport,
-  VehicleStatus,
-} from '../../types';
+import { ChargingPointStatus } from '../../types/charging.types';
+import { HubStatus, VehicleStatus } from '../../types/hub.types';
+import { DispatchOrder, IncidentReport } from '../../types/operations.types';
+import { AccountStatus, AuditCategory } from '../../types/user.types';
 
-export function formatVnd(amount?: number | null): string {
-  return `${Math.round(amount ?? 0).toLocaleString('vi-VN')} VNĐ`;
-}
-
-export function formatTimeShort(iso?: string | null): string {
-  if (!iso) return '—';
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleString('vi-VN', {
-    hour: '2-digit',
-    minute: '2-digit',
-    day: '2-digit',
-    month: '2-digit',
-  });
-}
-
+/**
+ * Mục đích: Hiển thị nhãn trạng thái dạng viên thuốc với bảng màu đồng nhất toàn hệ thống.
+ */
 export const StatusBadge: React.FC<{
   variant: 'success' | 'warning' | 'danger' | 'info' | 'neutral' | 'emerald';
   children: React.ReactNode;
@@ -46,6 +28,9 @@ export const StatusBadge: React.FC<{
   );
 };
 
+/**
+ * Mục đích: Trả về nhãn hiển thị tương ứng với trạng thái phương tiện dùng chung.
+ */
 export function renderVehicleStatusBadge(status: VehicleStatus) {
   switch (status) {
     case 'AVAILABLE':
@@ -64,12 +49,18 @@ export function renderVehicleStatusBadge(status: VehicleStatus) {
   }
 }
 
+/**
+ * Mục đích: Trả về nhãn hiển thị mức độ khả dụng hiện tại của một trạm Hub.
+ */
 export function renderHubStatusBadge(status?: HubStatus) {
   if (status === 'LOW_VEHICLES') return <StatusBadge variant="danger">Thiếu xe</StatusBadge>;
   if (status === 'HIGH_OCCUPANCY') return <StatusBadge variant="warning">Sắp đầy bãi</StatusBadge>;
   return <StatusBadge variant="success">Ổn định</StatusBadge>;
 }
 
+/**
+ * Mục đích: Trả về nhãn trạng thái hoạt động của trụ sạc.
+ */
 export function renderChargingPointBadge(status: ChargingPointStatus) {
   switch (status) {
     case 'AVAILABLE':
@@ -83,6 +74,9 @@ export function renderChargingPointBadge(status: ChargingPointStatus) {
   }
 }
 
+/**
+ * Mục đích: Trả về nhãn trạng thái của tài khoản người dùng.
+ */
 export function renderAccountStatusBadge(status: AccountStatus) {
   switch (status) {
     case 'ACTIVE':
@@ -98,18 +92,27 @@ export function renderAccountStatusBadge(status: AccountStatus) {
   }
 }
 
+/**
+ * Mục đích: Trả về nhãn tiến độ của lệnh điều phối phương tiện.
+ */
 export function renderDispatchBadge(status: DispatchOrder['status']) {
   if (status === 'IN_TRANSIT') return <StatusBadge variant="warning">Đang chuyển</StatusBadge>;
   if (status === 'COMPLETED') return <StatusBadge variant="success">Hoàn tất</StatusBadge>;
   return <StatusBadge variant="neutral">Đã hủy</StatusBadge>;
 }
 
+/**
+ * Mục đích: Trả về nhãn tiến độ xử lý báo cáo sự cố thiết bị.
+ */
 export function renderIncidentBadge(status: IncidentReport['status']) {
   if (status === 'OPEN') return <StatusBadge variant="danger">Đang xử lý</StatusBadge>;
   if (status === 'IN_PROGRESS') return <StatusBadge variant="warning">Đang kiểm tra</StatusBadge>;
   return <StatusBadge variant="success">Đã khắc phục</StatusBadge>;
 }
 
+/**
+ * Mục đích: Trả về nhãn phân loại nhóm sự kiện của nhật ký kiểm toán.
+ */
 export function renderAuditCategoryBadge(category: AuditCategory) {
   switch (category) {
     case 'QUAN_TRI':
@@ -122,32 +125,3 @@ export function renderAuditCategoryBadge(category: AuditCategory) {
       return <StatusBadge variant="neutral">API</StatusBadge>;
   }
 }
-
-export const MetricCard: React.FC<{
-  label: string;
-  value: string | number;
-  sublabel?: string;
-  icon: React.ReactNode;
-  accent?: 'emerald' | 'amber' | 'rose' | 'sky';
-}> = ({ label, value, sublabel, icon, accent = 'emerald' }) => {
-  const iconColors = {
-    emerald: 'bg-[#e6f5ee] text-[#006a4e]',
-    amber: 'bg-amber-50 text-amber-700',
-    rose: 'bg-rose-50 text-rose-700',
-    sky: 'bg-sky-50 text-sky-700',
-  };
-  return (
-    <div className="rounded-2xl border border-[#dfe5e1] bg-white p-5 shadow-sm transition hover:border-[#b9cbc3]">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-xs font-medium uppercase tracking-wider text-[#59645e]">{label}</p>
-          <p className="mt-2 text-2xl font-bold tracking-tight text-[#1b211e]">{value}</p>
-          {sublabel && <p className="mt-1 text-xs text-[#59645e]">{sublabel}</p>}
-        </div>
-        <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${iconColors[accent]}`}>
-          {icon}
-        </div>
-      </div>
-    </div>
-  );
-};
