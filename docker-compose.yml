@@ -50,7 +50,8 @@ services:
     ports:
       - "127.0.0.1:5173:80"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
 
 volumes:
   pgdata:
